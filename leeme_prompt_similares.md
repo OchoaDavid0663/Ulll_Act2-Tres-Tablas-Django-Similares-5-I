@@ -949,6 +949,7 @@ UIII_Similares_0663/
 │   │   ├── clientes/
 │   │   │   ├── agregar_clientes.html
 │   │   │   ├── actualizar_clientes.html
+│   │   │   ├── eliminar_clientes.html
 │   │   │   └── ver_clientes.html
 │   │   ├── base.html
 │   │   ├── footer.html
