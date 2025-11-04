@@ -803,6 +803,181 @@ Para el borrado, he optado por una confirmación vía JavaScript directamente en
 {% endblock %}
 ```
 
+¡Tienes razón! Mis disculpas por la omisión. Aunque implementé el borrado con un `form` en `ver_clientes.html` y una confirmación JS, si prefieres una página de confirmación dedicada, aquí tienes el archivo `eliminar_clientes.html` (o `borrar_cliente.html` como lo habías nombrado en tus instrucciones iniciales) y el ajuste necesario en `views.py`.
+
+---
+
+### **Corrección en `views.py` para la vista de borrado**
+
+Vamos a ajustar la vista `borrar_cliente` para que primero muestre la página de confirmación y luego realice el borrado al recibir el POST.
+
+**Modifica `app_Similares/views.py` de la siguiente manera:**
+
+```python
+from django.shortcuts import render, redirect, get_object_or_404
+from .models import Cliente
+from django.http import HttpResponse # Importa HttpResponse para casos de depuración o confirmación simple
+# from django.views.decorators.http import require_POST # Ya no será solo POST para borrar_cliente
+
+# --- VISTAS PARA CLIENTES ---
+
+def inicio_similares(request):
+    """
+    Vista para la página de inicio del sistema.
+    """
+    return render(request, 'app_Similares/inicio.html')
+
+def ver_clientes(request):
+    """
+    Muestra una lista de todos los clientes registrados.
+    """
+    clientes = Cliente.objects.all().order_by('apellido', 'nombre')
+    return render(request, 'app_Similares/clientes/ver_clientes.html', {'clientes': clientes})
+
+def agregar_cliente(request):
+    """
+    Maneja la adición de un nuevo cliente.
+    Si la solicitud es GET, muestra el formulario.
+    Si la solicitud es POST, procesa los datos del formulario y guarda el cliente.
+    """
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        apellido = request.POST.get('apellido')
+        email = request.POST.get('email')
+        telefono = request.POST.get('telefono')
+        direccion = request.POST.get('direccion')
+        fecha_nacimiento = request.POST.get('fecha_nacimiento')
+
+        # Simple validación, se puede mejorar
+        if nombre and apellido and email:
+            # Crea un nuevo cliente
+            Cliente.objects.create(
+                nombre=nombre,
+                apellido=apellido,
+                email=email,
+                telefono=telefono,
+                direccion=direccion,
+                fecha_nacimiento=fecha_nacimiento if fecha_nacimiento else None
+            )
+            return redirect('ver_clientes') # Redirige a la lista de clientes después de agregar
+        else:
+            # Si faltan datos importantes, puedes añadir un mensaje de error
+            return render(request, 'app_Similares/clientes/agregar_clientes.html', {
+                'error_message': 'Por favor, completa todos los campos obligatorios.'
+            })
+    return render(request, 'app_Similares/clientes/agregar_clientes.html')
+
+
+def actualizar_cliente(request, pk):
+    """
+    Muestra el formulario para actualizar un cliente existente.
+    """
+    cliente = get_object_or_404(Cliente, pk=pk)
+    return render(request, 'app_Similares/clientes/actualizar_clientes.html', {'cliente': cliente})
+
+
+# @require_POST # Se remueve para permitir GET y POST en la misma URL de actualización
+def realizar_actualizacion_cliente(request, pk): # Mantengo el nombre de la vista como lo tenías
+    """
+    Procesa los datos del formulario POST para actualizar un cliente existente.
+    """
+    cliente = get_object_or_404(Cliente, pk=pk)
+    
+    if request.method == 'POST': # Aseguramos que solo se procesa en POST
+        cliente.nombre = request.POST.get('nombre')
+        cliente.apellido = request.POST.get('apellido')
+        cliente.email = request.POST.get('email')
+        cliente.telefono = request.POST.get('telefono')
+        cliente.direccion = request.POST.get('direccion')
+        fecha_nacimiento = request.POST.get('fecha_nacimiento')
+        cliente.fecha_nacimiento = fecha_nacimiento if fecha_nacimiento else None
+        
+        cliente.save() # Guarda los cambios en la base de datos
+        return redirect('ver_clientes') # Redirige a la lista de clientes
+    # Si por alguna razón alguien hace un GET a esta URL, lo redirigimos o mostramos error.
+    return redirect('ver_clientes') 
+
+
+def borrar_cliente(request, pk):
+    """
+    Muestra la página de confirmación para borrar un cliente (GET)
+    y luego borra el cliente si se confirma con POST.
+    """
+    cliente = get_object_or_404(Cliente, pk=pk)
+    
+    if request.method == 'POST':
+        cliente.delete()
+        return redirect('ver_clientes')
+    
+    # Si es GET, muestra la página de confirmación
+    return render(request, 'app_Similares/clientes/borrar_cliente.html', {'cliente': cliente})
+```
+
+---
+
+### **Crear o Modificar `app_Similares/templates/clientes/borrar_cliente.html`**
+
+Ahora, dentro de `app_Similares/templates/clientes`, asegúrate de que el archivo `borrar_cliente.html` tenga este contenido (si lo habías creado con el contenido "Aunque no se usará directamente", ahora sí lo usaremos):
+
+**`app_Similares/templates/clientes/borrar_cliente.html`**
+
+```html
+{% extends 'app_Similares/base.html' %}
+
+{% block title %}Borrar Cliente - Similares{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm mx-auto" style="max-width: 500px;">
+        <div class="card-header bg-danger text-white">
+            <h3 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i> Confirmar Eliminación</h3>
+        </div>
+        <div class="card-body">
+            <p class="card-text">Estás a punto de eliminar al cliente:</p>
+            <h4 class="text-center mb-3"><strong>{{ cliente.nombre }} {{ cliente.apellido }}</strong> (ID: {{ cliente.id }})</h4>
+            <p class="text-danger text-center fw-bold">Esta acción es irreversible.</p>
+            
+            <div class="alert alert-warning text-center" role="alert">
+                ¿Estás seguro de que deseas continuar?
+            </div>
+
+            <form method="post" action="{% url 'borrar_cliente' cliente.pk %}" class="d-grid gap-2">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-lg"><i class="fas fa-trash-alt me-2"></i> Sí, Eliminar</button>
+                <a href="{% url 'ver_clientes' %}" class="btn btn-secondary btn-lg"><i class="fas fa-arrow-left me-2"></i> Cancelar</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+---
+
+### **Ajuste en `app_Similares/templates/clientes/ver_clientes.html`**
+
+Finalmente, necesitamos cambiar cómo el botón "Eliminar" en `ver_clientes.html` redirige a esta nueva página de confirmación, en lugar de borrar directamente.
+
+**Modifica el `<td>` de acciones en `app_Similares/templates/clientes/ver_clientes.html`:**
+
+```html
+                    <td class="text-center">
+                        <a href="{% url 'actualizar_cliente' cliente.pk %}" class="btn btn-warning btn-sm me-1" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <!-- Botón de borrar ahora redirige a la página de confirmación -->
+                        <a href="{% url 'borrar_cliente' cliente.pk %}" class="btn btn-danger btn-sm" title="Eliminar">
+                            <i class="fas fa-trash-alt"></i>
+                        </a>
+                    </td>
+```
+
+---
+
+¡Con estos cambios, ahora tienes una página de confirmación explícita para el borrado de clientes! Reinicia tu servidor (`python manage.py runserver 8663`) y verifica que todo funcione como esperas.
+
+Gracias por la corrección, ¡es importante tener el flujo completo!
+
 ---
 
 ### **23. No utilizar `forms.py`**
@@ -949,7 +1124,7 @@ UIII_Similares_0663/
 │   │   ├── clientes/
 │   │   │   ├── agregar_clientes.html
 │   │   │   ├── actualizar_clientes.html
-│   │   │   ├── eliminar_clientes.html
+│   │   │   ├── borrar_cliente.html
 │   │   │   └── ver_clientes.html
 │   │   ├── base.html
 │   │   ├── footer.html
